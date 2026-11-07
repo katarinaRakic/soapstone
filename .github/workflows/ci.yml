@@ -1,29 +1,53 @@
 # Ime workflow-a; vidi se na tabu Actions i na PR-u.
 name: CI
-# Kada se pokreće: na svaki pull request, a push samo kad je na main.
-# Push na branch sa otvorenim PR-om ionako pokreće run za PR.
+# Pull request, push na main i ručno pokretanje (dugme Run workflow).
 on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 jobs:
-  # Ime job-a; na PR-u se check zove "CI / check".
-  check:
+  lint:
     runs-on: ubuntu-latest
     steps:
-      # Kod iz repoa na runner; bez ovoga runner je prazan.
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.12
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
       - uses: actions/checkout@v7
       # Provera da bin/ i .env nikad ne uđu u repo.
       - name: Higijena repoa
         run: |
           git ls-files bin .env
           test -z "$(git ls-files bin .env)"
-      # Go, iste verzije kao u go.mod.
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: make test
+
+  smoke:
+    # Kreće tek kad lint i test uspeju.
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    steps:
+      # Svaki job ima svoj prazan runner, pa sve radi sam.
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - run: make build
-      - run: make test
-      - uses: golangci/golangci-lint-action@v9
-        with:
-          version: v2.12
+      - name: Pokreni aplikaciju
+        run: |
+          ./bin/soapstone > app.log 2>&1 &
+          sleep 2
+      - name: Smoke test
+        run: ./scripts/smoke.sh
+      - name: Statusi iz loga
+        run: jq -r .status app.log | grep -v null | sort | uniq -c | sort -rn
