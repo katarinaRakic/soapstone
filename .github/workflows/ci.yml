@@ -1,14 +1,21 @@
-# Prvi workflow predmeta. Za sada samo pokazuje da se izvršava i gde;
-# šta stvarno radi, pišete vi.
+# Ime workflow-a; vidi se na tabu Actions i na PR-u.
 name: CI
-
-# Kada se pokreće: na svaki push i na svaki pull request.
-on: [push, pull_request]
-
+# Kada se pokreće: na svaki pull request, a push samo kad je na main.
+# Push na branch sa otvorenim PR-om ionako pokreće run za PR.
+on:
+  pull_request:
+  push:
+    branches: [main]
 jobs:
+  # Ime job-a; na PR-u se check zove "CI / check".
   check:
     runs-on: ubuntu-latest
     steps:
-      - run: echo "Zdravo iz GitHub Actions, commit $GITHUB_SHA"
-      - run: uname -a
-      - run: pwd && ls -la
+      # Kod iz repoa na runner; bez ovoga runner je prazan.
+      - uses: actions/checkout@v7
+      # Go, iste verzije kao u go.mod.
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: make build
+      - run: make test
