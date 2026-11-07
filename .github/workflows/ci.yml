@@ -13,6 +13,11 @@ jobs:
     steps:
       # Kod iz repoa na runner; bez ovoga runner je prazan.
       - uses: actions/checkout@v7
+      # Provera da bin/ i .env nikad ne uđu u repo.
+      - name: Higijena repoa
+        run: |
+          git ls-files bin .env
+          test -z "$(git ls-files bin .env)"
       # Go, iste verzije kao u go.mod.
       - uses: actions/setup-go@v7
         with:
