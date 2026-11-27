@@ -51,3 +51,44 @@ jobs:
         run: ./scripts/smoke.sh
       - name: Statusi iz loga
         run: jq -r .status app.log | grep -v null | sort | uniq -c | sort -rn
+
+  integration:
+    # Kao smoke: kreće tek kad lint i test uspeju.
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    # Isti job, po jednom za svaku verziju Postgres-a.
+    strategy:
+      # Pad jedne verzije ne prekida ostale.
+      fail-fast: false
+      matrix:
+        postgres: ["16", "17", "18"]
+    # Service container: GitHub pokrene bazu pre prvog step-a.
+    services:
+      db:
+        image: postgres:${{ matrix.postgres }}-alpine
+        env:
+          POSTGRES_USER: soapstone
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: soapstone
+        ports:
+          - 5432:5432
+        # Healthcheck: step-ovi ne kreću dok baza nije healthy.
+        options: >-
+          --health-cmd "pg_isready -h localhost -U soapstone -d soapstone"
+          --health-interval 2s
+          --health-retries 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Testovi store-a nad bazom
+        env:
+          TEST_DATABASE_URL: postgres://soapstone:test@localhost:5432/soapstone?sslmode=disable
+        run: go test -v ./internal/store
+      # Preskočen test je "zelen", pa proveravamo da je stvarno prošao.
+      - name: Provera da TestPostgres nije preskočen
+        env:
+          TEST_DATABASE_URL: postgres://soapstone:test@localhost:5432/soapstone?sslmode=disable
+        run: |
+          go test -v -count=1 -run TestPostgres ./internal/store | grep -q -- "--- PASS: TestPostgres"
